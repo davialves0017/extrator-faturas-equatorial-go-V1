@@ -14,7 +14,6 @@ def final_extractor(pdf_path):
         with pdfplumber.open(pdf_path) as pdf:
             full_text = ""
             for page in pdf.pages:
-                # Usar layout=True pode ajudar a preservar o espaçamento original
                 text = page.extract_text(layout=True)
                 if text:
                     full_text += text + "\n"
@@ -22,44 +21,34 @@ def final_extractor(pdf_path):
             if not full_text:
                 return []
 
-            # 1. Extrair Metadados (UC, Data, etc.)
-            uc_match = re.search(r'(\d{8,10})', full_text) # Pega o primeiro número longo que provavelmente é a UC
+            # 1. Extrair Metadados
+            uc_match = re.search(r'(\d{8,10})', full_text)
             mes_ano_match = re.search(r'([A-Z]{3}/\d{4})', full_text)
             
             uc = uc_match.group(1) if uc_match else "N/A"
             mes_ano = mes_ano_match.group(1) if mes_ano_match else "N/A"
 
-            # 2. Definir os Padrões de Extração (Regex)
-            
-            # Padrão para itens principais (CONSUMO, BANDEIRA, INJEÇÃO)
-            # Normaliza espaços múltiplos para um único espaço para facilitar a correspondência
+            # 2. Definir Padrões de Extração (Regex)
             normalized_text = re.sub(r'\s+', ' ', full_text)
             
-            # Regex para encontrar os itens que começam com uma descrição conhecida
             main_item_pattern = re.compile(
-                r"(FORNECIMENTO|ADC BANDEIRA AMARELA|ADC BANDEIRA VERMELHA|CONSUMO N.O COMPENSADO|CONSUMO SCEE|INJEÇÃO SCEE - UC \d+ - GD I|ENERGIA COMP N.O ISENTA \(TRIBUTOS\) - UC)" # Descrições
-                r"\s+(kWh)?\s*" # Unidade (opcional)
-                r"([\d\.,-]+)\s+" # Quant.
-                r"([\d\.,-]+)\s+" # Preço Unit.
-                r"([\d\.,-]+)\s+" # Valor
-                r"([\d\.,-]+)\s+" # PIS/COFINS (valor)
-                r"([\d\.,-]+)\s+" # Base ICMS
-                r"([\d\.,%]+)\s+" # Alíquota ICMS
-                r"([\d\.,-]+)\s*" # ICMS (valor)
-                r"([\d\.,-]+)?"  # Tarifa Unit. (opcional)
+                r"(FORNECIMENTO|ADC BANDEIRA AMARELA|ADC BANDEIRA VERMELHA|CONSUMO N.O COMPENSADO|CONSUMO SCEE|INJEÇÃO SCEE - UC \d+ - GD I|ENERGIA COMP N.O ISENTA \(TRIBUTOS\) - UC)"
+                r"\s+(kWh)?\s*"
+                r"([\d\.,-]+)\s+"
+                r"([\d\.,-]+)\s+"
+                r"([\d\.,-]+)\s+"
+                r"([\d\.,-]+)\s+"
+                r"([\d\.,-]+)\s+"
+                r"([\d\.,%]+)\s+"
+                r"([\d\.,-]+)\s*"
+                r"([\d\.,-]+)?"
             )
-
-            # Padrão para itens simples (CONTRIBUIÇÃO, DEVOLUÇÃO, etc.)
             simple_item_pattern = re.compile(
                 r"(CONTRIB\. ILUM\. P\.BLICA - MUNICIPAL|DEV\. VAL\. COBR\. A MAIOR \(-\))\s+([\d\.,-]+)"
             )
-            
-            # Padrão para os impostos que aparecem na lateral
             tax_pattern = re.compile(r"(PIS/PASEP|ICMS|COFINS)\s+([\d\.,]+)\s+([\d\.,%]+)\s+([\d\.,-]+)")
 
-            # 3. Encontrar todas as correspondências no texto normalizado
-            
-            # Itens principais
+            # 3. Encontrar correspondências
             for match in main_item_pattern.finditer(normalized_text):
                 all_items.append({
                     'Descrição': match.group(1).strip(),
@@ -73,12 +62,8 @@ def final_extractor(pdf_path):
                     'ICMS (R$)': match.group(9),
                     'Tarifa unit. (R$)': match.group(10) or '0,00'
                 })
-
-            # Itens simples
             for match in simple_item_pattern.finditer(normalized_text):
                 all_items.append({'Descrição': match.group(1).strip(), 'Valor (R$)': match.group(2)})
-            
-            # Impostos laterais
             for match in tax_pattern.finditer(normalized_text):
                 all_items.append({
                     'Descrição': match.group(1),
@@ -87,7 +72,6 @@ def final_extractor(pdf_path):
                     'Valor (R$)': match.group(4)
                 })
 
-            # Adicionar metadados a todos os itens encontrados
             for item in all_items:
                 item['Arquivo'] = os.path.basename(pdf_path)
                 item['UC'] = uc
@@ -99,8 +83,16 @@ def final_extractor(pdf_path):
     return all_items
 
 def main():
-    # CAMINHO ATUALIZADO AQUI
-    pdf_directory = r'C:\Users\Ludmila Evangelista\Documents\extrator'
+    """
+    Função principal que orquestra todo o processo:
+    1. Define os diretórios de entrada e saída.
+    2. Encontra todos os arquivos PDF no diretório.
+    3. Itera sobre cada PDF, chamando a função de extração.
+    4. Consolida todos os dados extraídos.
+    5. Salva os dados consolidados em um arquivo Excel formatado.
+    """
+    # CAMINHO CORRIGIDO AQUI
+    pdf_directory = r'C:\Users\Ludmila\Downloads\extrator'
     
     output_file = 'RELATORIO_FINAL_FATURAS.xlsx'
     
@@ -118,7 +110,7 @@ def main():
     for filename in pdf_files:
         pdf_path = os.path.join(pdf_directory, filename)
         print(f"Processando: {filename}")
-        # Normalizando o texto antes de passar para o extrator
+        
         items = final_extractor(pdf_path)
         if items:
             all_data.extend(items)
@@ -132,30 +124,30 @@ def main():
 
     df = pd.DataFrame(all_data)
     
-    # Organizar colunas na ordem desejada
     column_order = [
         'Arquivo', 'UC', 'Mês/Ano', 'Descrição', 'Unid.', 'Quant.', 
-        'Preço unit (R$)', 'Valor (R$)', 'PIS/COFINS (val)', 
+        'Preço unit (R$)', 'Valor (R$)','PIS/COFINS (val)', 
         'Base Calc. ICMS (R$)', 'Alíq. ICMS (%)', 'ICMS (R$)', 'Tarifa unit. (R$)',
         'Base de Cálculo', 'Alíq. (%)'
     ]
     df = df.reindex(columns=column_order)
 
-    # Salvar em Excel com formatação
     with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
         df.to_excel(writer, sheet_name='Itens da Fatura', index=False)
         workbook  = writer.book
         worksheet = writer.sheets['Itens da Fatura']
         
-        # Formato do cabeçalho
         header_format = workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'fg_color': '#D7E4BC', 'border': 1})
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(0, col_num, value, header_format)
         
-        # Auto-ajuste da largura das colunas
         for i, col in enumerate(df.columns):
-            column_len = max(df[col].astype(str).map(len).max(), len(col))
-            worksheet.set_column(i, i, column_len + 2)
+            # Adicionado um tratamento para evitar erro se a coluna estiver vazia
+            if not df[col].empty:
+                column_len = max(df[col].astype(str).map(len).max(), len(col))
+                worksheet.set_column(i, i, column_len + 2)
+            else:
+                worksheet.set_column(i, i, len(col) + 2)
 
     print(f"\nSUCESSO! Relatório final gerado: {output_file}")
 
