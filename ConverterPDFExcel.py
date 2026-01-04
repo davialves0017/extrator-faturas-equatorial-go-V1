@@ -21,7 +21,7 @@ def final_extractor(pdf_path):
             if not full_text:
                 return []
 
-            # 1. Extrair Metadados
+            # 1. Extrair Metadados (UC, Data, etc.)
             uc_match = re.search(r'(\d{8,10})', full_text)
             mes_ano_match = re.search(r'([A-Z]{3}/\d{4})', full_text)
             
@@ -32,20 +32,22 @@ def final_extractor(pdf_path):
             normalized_text = re.sub(r'\s+', ' ', full_text)
             
             main_item_pattern = re.compile(
-                r"(FORNECIMENTO|ADC BANDEIRA AMARELA|ADC BANDEIRA VERMELHA|CONSUMO N.O COMPENSADO|CONSUMO SCEE|INJEÇÃO SCEE - UC \d+ - GD I|ENERGIA COMP N.O ISENTA \(TRIBUTOS\) - UC)"
-                r"\s+(kWh)?\s*"
-                r"([\d\.,-]+)\s+"
-                r"([\d\.,-]+)\s+"
-                r"([\d\.,-]+)\s+"
-                r"([\d\.,-]+)\s+"
-                r"([\d\.,-]+)\s+"
-                r"([\d\.,%]+)\s+"
-                r"([\d\.,-]+)\s*"
-                r"([\d\.,-]+)?"
+                r"(FORNECIMENTO|ADC BANDEIRA AMARELA|ADC BANDEIRA VERMELHA|CONSUMO N.O COMPENSADO|CONSUMO SCEE|INJEÇÃO SCEE - UC \d+ - GD I|ENERGIA COMP N.O ISENTA \(TRIBUTOS\) - UC)" # Descrições
+                r"\s+(kWh)?\s*" # Unidade (opcional)
+                r"([\d\.,-]+)\s+" # Quant.
+                r"([\d\.,-]+)\s+" # Preço Unit.
+                r"([\d\.,-]+)\s+" # Valor
+                r"([\d\.,-]+)\s+" # PIS/COFINS (valor)
+                r"([\d\.,-]+)\s+" # Base ICMS
+                r"([\d\.,%]+)\s+" # Alíquota ICMS
+                r"([\d\.,-]+)\s*" # ICMS (valor)
+                r"([\d\.,-]+)?"  # Tarifa Unit. (opcional)
             )
+
             simple_item_pattern = re.compile(
                 r"(CONTRIB\. ILUM\. P\.BLICA - MUNICIPAL|DEV\. VAL\. COBR\. A MAIOR \(-\))\s+([\d\.,-]+)"
             )
+            
             tax_pattern = re.compile(r"(PIS/PASEP|ICMS|COFINS)\s+([\d\.,]+)\s+([\d\.,%]+)\s+([\d\.,-]+)")
 
             # 3. Encontrar correspondências
@@ -62,8 +64,10 @@ def final_extractor(pdf_path):
                     'ICMS (R$)': match.group(9),
                     'Tarifa unit. (R$)': match.group(10) or '0,00'
                 })
+
             for match in simple_item_pattern.finditer(normalized_text):
                 all_items.append({'Descrição': match.group(1).strip(), 'Valor (R$)': match.group(2)})
+            
             for match in tax_pattern.finditer(normalized_text):
                 all_items.append({
                     'Descrição': match.group(1),
@@ -126,7 +130,7 @@ def main():
     
     column_order = [
         'Arquivo', 'UC', 'Mês/Ano', 'Descrição', 'Unid.', 'Quant.', 
-        'Preço unit (R$)', 'Valor (R$)','PIS/COFINS (val)', 
+        'Preço unit (R$)', 'Valor (R$)', 'PIS/COFINS (val)', 
         'Base Calc. ICMS (R$)', 'Alíq. ICMS (%)', 'ICMS (R$)', 'Tarifa unit. (R$)',
         'Base de Cálculo', 'Alíq. (%)'
     ]
@@ -142,7 +146,6 @@ def main():
             worksheet.write(0, col_num, value, header_format)
         
         for i, col in enumerate(df.columns):
-            # Adicionado um tratamento para evitar erro se a coluna estiver vazia
             if not df[col].empty:
                 column_len = max(df[col].astype(str).map(len).max(), len(col))
                 worksheet.set_column(i, i, column_len + 2)
